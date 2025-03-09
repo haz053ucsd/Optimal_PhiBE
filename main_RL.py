@@ -154,19 +154,6 @@ def RL_finder_2D_LQR(
         b_Q = b_cal_Q_2D_RL(traj_mat, act_mat, reward_mat, bases_Q, dt)
         running_coe_Q = torch.inverse(mat_Q) @ b_Q
 
-
-        # update b and c by solving the optimization problem
-        # (in the LQR case, it amounts to optimize a quadratic function)
-        # correction = 1 if not const_basis else 0
-        #
-        # K_vec = torch.tensor([[running_coe_Q[3 - correction]], [running_coe_Q[4 - correction]]])
-        # N_mat = torch.tensor([[running_coe_Q[6 - correction], running_coe_Q[7 - correction]],
-        #                       [running_coe_Q[8 - correction], running_coe_Q[9 - correction]]])
-        # L_mat = torch.tensor(
-        #     [[running_coe_Q[13 - correction], 0.5 * running_coe_Q[10 - correction]],
-        #      [0.5 * running_coe_Q[10 - correction], running_coe_Q[-1]]])
-        # running_b = - 0.5 * torch.inverse(L_mat).matmul(N_mat.T)
-        # running_c = torch.inverse(L_mat).matmul(K_vec)
         correction = 1 if simple_basis else 0
         N_mat = torch.tensor([[running_coe_Q[2 - correction], running_coe_Q[3 - correction]],
                               [running_coe_Q[4 - correction], running_coe_Q[5 - correction]]])
