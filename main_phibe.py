@@ -118,7 +118,7 @@ def phibe_finder_1D_LQR(
     if order == 1:
         traj_mat_Q, act_mat_Q = Q_dyn_generator_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b,)  # (m, I)
     elif order == 2:
-        traj_mat_Q, act_mat_Q = Q_dyn_generator_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b)  # (m, I)
+        traj_mat_Q, act_mat_Q = Q_dyn_generator_const_act_2nd_exact(info_true["A"], info_true["B"], info_true["sig"], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b)  # (m, I)
 
     for _ in tqdm(range(num_iter), desc=f"Running Optimal Phibe of order {order} using {Q_method}"):
         # Record b and c, collect statistics
@@ -129,10 +129,12 @@ def phibe_finder_1D_LQR(
 
 
         if order == 2:
-            traj_mat = linear_dyn_generator_stochastic_const_act_exact_2nd(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
+            traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact_2nd(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
+            # traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
         elif order == 1:
-            traj_mat = linear_dyn_generator_stochastic_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
-        act_mat = running_b * traj_mat
+            traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
+            # traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact_2nd(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
+        # act_mat = running_b * traj_mat
         reward_mat = reward(traj_mat, act_mat)
 
         # Policy evaluation

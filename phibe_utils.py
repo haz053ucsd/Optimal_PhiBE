@@ -58,6 +58,39 @@ def mat_cal_stochastic_deterministic(traj_mat, bases, d_bases, sec_d_bases, dt, 
 
     return ans
 
+def mat_cal_stochastic_2nd_deterministic(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
+    # computes the matrix for V
+    # traj_mat shape (m, I), bases takes (m, I) returns (M+1, m, I),
+    # d_bases takes (M+1, m, I) and returns (m, I, M+1), sec_d_bases takes (m, I) and returns (M+1, m, I)
+    # return shape (M+1, M+1)
+
+    # Precompute index ranges
+    I = traj_mat.shape[1]
+    valid_I = (I // 2) * 2 - 2
+    traj_mat_curr = traj_mat[:, :valid_I:2]  # (m, valid_I)
+    traj_mat_next = traj_mat[:, 1:valid_I+1:2]
+    traj_mat_next_next = traj_mat[:, 2:valid_I+2:2]  # (m, valid_I)
+
+
+    # Compute a, gradient, sec_gradient
+    a = bases(traj_mat_curr).permute(1, 2, 0)  # (m, valid_I, M+1)
+    gradient = d_bases(traj_mat_curr).permute(1, 2, 0)  # (m, valid_I, M+1)
+
+    # Compute mu_hat and sig_hat
+    one_step = traj_mat_next - traj_mat_curr
+    two_step = traj_mat_next_next - traj_mat_curr
+
+    # mu_hat = (2 * one_step - 0.5 * two_step) / dt  # (m, valid_I)
+    mu_hat = (2 * one_step - 0.5 * two_step) / dt  # (m, valid_I)
+
+    # Compute b
+    b = beta * a - mu_hat.unsqueeze(-1) * gradient
+
+    # Compute outer products and accumulate
+    ans = torch.einsum('ijk,ijl->kl', a, b)
+
+    return ans
+
 
 def mat_cal_stochastic_2nd(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
     # computes the matrix for V
@@ -92,39 +125,6 @@ def mat_cal_stochastic_2nd(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
     return ans
 
 
-def mat_cal_stochastic_2nd_deterministic(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
-    # computes the matrix for V
-    # traj_mat shape (m, I), bases takes (m, I) returns (M+1, m, I),
-    # d_bases takes (M+1, m, I) and returns (m, I, M+1), sec_d_bases takes (m, I) and returns (M+1, m, I)
-    # return shape (M+1, M+1)
-
-    # Precompute index ranges
-    traj_mat_curr = traj_mat[:, :-2]  # (m, I-2)
-    traj_mat_next = traj_mat[:, 1:-1]
-    traj_mat_next_next = traj_mat[:, 2:]  # (m, I-2)
-
-
-    # Compute a, gradient, sec_gradient
-    a = bases(traj_mat_curr).permute(1, 2, 0)  # (m, I-2, M+1)
-    gradient = d_bases(traj_mat_curr).permute(1, 2, 0)  # (m, I-2, M+1)
-    # sec_gradient = sec_d_bases(traj_mat_curr).permute(1, 2, 0)  # (m, I-2, M+1)
-
-    # Compute mu_hat and sig_hat
-    one_step = traj_mat_next - traj_mat_curr
-    two_step = traj_mat_next_next - traj_mat_curr
-
-    # mu_hat = (2 * one_step - 0.5 * two_step) / dt  # (m, I-2)
-    # sig_hat = torch.zeros_like(mu_hat)  # (m, I-2)
-    mu_hat = one_step / dt  # (m, I-2)
-
-    # Compute b
-    # b = beta * a - mu_hat.unsqueeze(-1) * gradient - 0.5 * sig_hat.unsqueeze(-1) * sec_gradient
-    b = beta * a - mu_hat.unsqueeze(-1) * gradient
-
-    # Compute outer products and accumulate
-    ans = torch.einsum('ijk,ijl->kl', a, b)
-
-    return ans
 
 def b_cal(traj_mat, reward_mat, bases):
     # traj_mat shape (m, I), reward_mat shape (m, I), bases takes (m, I) returns (M+1, m, I)
@@ -138,14 +138,15 @@ def b_cal(traj_mat, reward_mat, bases):
 
     return ans
 
-
 def b_cal_2nd(traj_mat, reward_mat, bases):
     # traj_mat shape (m, I), reward_mat shape (m, I), bases takes (m, I) returns (M+1, m, I)
     # returns (M+1)
 
-    all_bases = bases(traj_mat[:, :-2]).permute(1, 2, 0)  # Shape should be (m, I-2, M+1)
+    I = traj_mat.shape[1]
+    valid_I = (I // 2) * 2 - 2
+    all_bases = bases(traj_mat[:, :valid_I:2]).permute(1, 2, 0)  # Shape should be (m, I-2, M+1)
 
-    weighted_bases = reward_mat[:, :-2].unsqueeze(-1) * all_bases  # Shape will be (m, I-2, M+1)
+    weighted_bases = reward_mat[:, :valid_I:2].unsqueeze(-1) * all_bases  # Shape will be (m, I-2, M+1)
 
     ans = weighted_bases.sum(dim=(0, 1))
 
@@ -305,14 +306,16 @@ def galarkin_Q_mat_cal_1st_1d(traj_mat_Q, act_mat_Q, bases_Q):
     return mat_Q
 
 
+
 def galarkin_Q_mat_cal_2nd_1d(traj_mat_Q, act_mat_Q, bases_Q):
-    traj_curr = traj_mat_Q[:, :-2]  # (m, I-1)
-    actions_curr = act_mat_Q[:, :-2]
-    bases_val = bases_Q(traj_curr, actions_curr) # (dim_bases_Q, m, I - 1)
+    I = traj_mat_Q.shape[1]
+    valid_I = (I // 2) * 2 - 2 
+    traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, I-1)
+    actions_curr = act_mat_Q[:, :valid_I:2]
+    bases_val = bases_Q(traj_curr, actions_curr) # (dim_bases_Q, m, I - 2)
     mat_Q = torch.einsum("ijk,ljk->il", bases_val, bases_val) # (dim_bases_Q, dim_bases_Q)
 
     return mat_Q
-
 
 def galarkin_Q_b_cal_1st_1d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
 
@@ -325,20 +328,49 @@ def galarkin_Q_b_cal_1st_1d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_g
 
 
     V_grad_vals_curr = V_grad(traj_curr) # (m, I-1)
-    V_sec_grad_curr = V_sec_grad(traj_curr)# (m, I-1)
 
     diff = traj_next - traj_curr  # (m, I-1)
-    diff_sq = diff**2  # (m, I-1)
 
     mu_hat = (1 / dt) * diff # (m, I-1)
-    sig_hat = torch.zeros_like(mu_hat) # (m, I-1)
 
-    term_1 = reward_mat_crr + mu_hat * V_grad_vals_curr + sig_hat * V_sec_grad_curr  # (m, I-1)
+    term_1 = reward_mat_crr + mu_hat * V_grad_vals_curr  # (m, I-1)
 
     b_Q = torch.einsum("ijk,jk->i", bases_val, term_1) # (dim_bases_Q)
 
 
     return b_Q
+
+
+def galarkin_Q_b_cal_2nd_1d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
+
+    I = traj_mat_Q.shape[1]
+    valid_I = (I // 2) * 2 - 2
+
+    traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, I-2)
+    traj_next = traj_mat_Q[:, 1:valid_I+1:2]  # (m, I-2)
+    traj_next_next = traj_mat_Q[:, 2:valid_I+2:2]  # (m, I-2)
+    actions_curr = act_mat_Q[:, :valid_I:2]  # (m, I-2)
+    # print(torch.norm(actions_curr[:, 1] - actions_curr[:, 0]))
+    reward_mat_crr = reward(traj_curr, actions_curr) #  (m, I-2)
+
+    bases_val = bases_Q(traj_curr, actions_curr) # (dim_bases_Q, m, I - 2)
+
+
+    V_grad_vals_curr = V_grad(traj_curr) # (m, I-2)
+
+    one_step = traj_next - traj_curr  # (m, I-2)
+
+    two_step = traj_next_next - traj_curr  # (m, I-2)
+
+    mu_hat = (1 / dt) * (2 * one_step - 0.5 * two_step)  # (m, I-2)
+
+    term_1 = reward_mat_crr + mu_hat * V_grad_vals_curr # (m, I-2)
+
+    b_Q = torch.einsum("ijk,jk->i", bases_val, term_1) # (dim_bases_Q)
+
+
+    return b_Q
+
 
 def galarkin_Q_b_cal_1st_1d(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
 
@@ -391,39 +423,6 @@ def galarkin_Q_b_cal_2nd_1d(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, 
     sig_hat = (1 / (2 * dt)) * (2 * one_sq - 0.5 * two_sq)  # (m, I-2)
 
     term_1 = reward_mat_crr + mu_hat * V_grad_vals_curr + sig_hat * V_sec_grad_curr  # (m, I-2)
-
-    b_Q = torch.einsum("ijk,jk->i", bases_val, term_1) # (dim_bases_Q)
-
-
-    return b_Q
-
-
-def galarkin_Q_b_cal_2nd_1d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
-
-    traj_curr = traj_mat_Q[:, :-2]  # (m, I-2)
-    traj_next = traj_mat_Q[:, 1:-1]  # (m, I-2)
-    traj_next_next = traj_mat_Q[:, 2:]  # (m, I-2)
-    actions_curr = act_mat_Q[:, :-2]  # (m, I-2)
-    reward_mat_crr = reward(traj_curr, actions_curr) #  (m, I-2)
-
-    bases_val = bases_Q(traj_curr, actions_curr) # (dim_bases_Q, m, I - 1)
-
-
-    V_grad_vals_curr = V_grad(traj_curr) # (m, I-1)
-    # V_sec_grad_curr = V_sec_grad(traj_curr)# (m, I-1)
-
-    one_step = traj_next - traj_curr  # (m, I-2)
-    # one_sq = one_step**2  # (m, I-2)
-
-    two_step = traj_next_next - traj_curr  # (m, I-2)
-    # two_sq = two_step**2  # (m, I-2)
-
-    # mu_hat = (1 / dt) * (2 * one_step - 0.5 * two_step)  # (m, I-2)
-    # sig_hat = torch.zeros_like(mu_hat)  # (m, I-2)
-    mu_hat = (1 / dt) * one_step  # (m, I-2)
-
-    # term_1 = reward_mat_crr + mu_hat * V_grad_vals_curr + sig_hat * V_sec_grad_curr  # (m, I-2)
-    term_1 = reward_mat_crr + mu_hat * V_grad_vals_curr # (m, I-2)
 
     b_Q = torch.einsum("ijk,jk->i", bases_val, term_1) # (dim_bases_Q)
 

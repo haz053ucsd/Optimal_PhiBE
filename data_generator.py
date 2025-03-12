@@ -14,6 +14,8 @@ def linear_dyn_generator_stochastic_const_act_exact(A, B, sig, running_b, I, m, 
 
     prev = res[:, 0]
     a_temp = running_b * prev
+    act_mat = torch.zeros((m, I))
+    act_mat[:, 0] = a_temp
     
     A = torch.tensor([A], dtype=torch.float64)
     B = torch.tensor([B], dtype=torch.float64)
@@ -26,10 +28,11 @@ def linear_dyn_generator_stochastic_const_act_exact(A, B, sig, running_b, I, m, 
         prev = mean + torch.randn(m) * torch.sqrt(var)
 
         a_temp = running_b * prev
+        act_mat[:, i] = a_temp
 
         res[:, i] = prev
 
-    return res
+    return res, act_mat
 
 def linear_dyn_generator_stochastic_const_act_exact_2nd(A, B, sig, running_b, I, m, dt, bd_low_s, bd_upper_s):
     # return shape (m, I), generate data for computing V in the case where diffusion coefficient is a constant (2nd order)
@@ -40,6 +43,8 @@ def linear_dyn_generator_stochastic_const_act_exact_2nd(A, B, sig, running_b, I,
 
     prev = res[:, 0]
     a_temp = running_b * prev
+    act_mat = torch.zeros((m, I))
+    act_mat[:, 0] = a_temp
     A = torch.tensor([A], dtype=torch.float64)
     B = torch.tensor([B], dtype=torch.float64)
     for i in range(1, I):
@@ -55,8 +60,9 @@ def linear_dyn_generator_stochastic_const_act_exact_2nd(A, B, sig, running_b, I,
 
         if i % 2 == 0:
             a_temp = running_b * prev
+        act_mat[:, i] = a_temp
 
-    return res
+    return res, act_mat
 
 def Q_dyn_generator_const_act_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_upper_s,
                                     bd_low_b, bd_upper_b):
