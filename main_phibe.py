@@ -11,7 +11,7 @@ from utils import (
 )
 from data_generator import (
     Q_dyn_generator_const_act_exact, Q_dyn_generator_const_act_2nd_exact, linear_dyn_generator_stochastic_const_act_exact, linear_dyn_generator_stochastic_const_act_exact_2nd,Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact,
-    linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact, linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact_2nd
+    linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact, linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact_2nd, Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact_2nd
 )
 from phibe_utils import (
     mat_cal_stochastic, mat_cal_stochastic_2nd, b_cal, b_cal_2nd,
@@ -130,11 +130,8 @@ def phibe_finder_1D_LQR(
 
         if order == 2:
             traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact_2nd(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
-            # traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
         elif order == 1:
             traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
-            # traj_mat, act_mat = linear_dyn_generator_stochastic_const_act_exact_2nd(info_true["A"], info_true["B"], info_true["sig"], running_b, I, m, dt, bd_low_s, bd_upper_s)
-        # act_mat = running_b * traj_mat
         reward_mat = reward(traj_mat, act_mat)
 
         # Policy evaluation
@@ -250,7 +247,10 @@ def phibe_finder_2D_LQR(
     A, B, sig, R, Q = info_true["A"], info_true["B"], info_true["sig"], info_true["R"], info_true["Q"]
 
     # Generate data for Q evaluation
-    traj_mat_Q, act_mat_Q = Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b, dim=2)
+    if order == 1:
+        traj_mat_Q, act_mat_Q = Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b, dim=2)
+    elif order == 2:
+        traj_mat_Q, act_mat_Q = Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact_2nd(A, B, sig, I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b, dim=2)
 
     for _ in tqdm(range(num_iter), desc=f"Running Optimal Phibe of order {order} using {Q_method}"):
         b_val.append(running_b)
