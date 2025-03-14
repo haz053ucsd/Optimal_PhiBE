@@ -4,11 +4,11 @@ from typing import Callable, List, Tuple, Dict, Union
 
 # Project-specific modules
 from utils import (
-    output_Q, output_V, out_put, true_V_eval_1D, true_V_eval_2D, l_2_compute_1D_V, LQR_1D_true_solution, l_2_compute_2D_V, LQR_2D_true_solution
+    output_Q, output_V, out_put, true_V_eval_1D, true_V_eval_2D, l_2_compute_1D_V, LQR_1D_true_solution, l_2_compute_2D_V, LQR_2D_true_solution, merton_policy_eval, dist_compute_merton, true_solution_merton
 )
 from data_generator import (
     linear_dyn_generator_stochastic_Q_exact, linear_dyn_generator_stochastic_const_act_exact,
-Q_dyn_generator_2D_stochastic_const_act_RL_const_diffusion_exact, linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact
+Q_dyn_generator_2D_stochastic_const_act_RL_const_diffusion_exact, linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact, merton_RL_Q_data
 
 )
 
@@ -162,6 +162,71 @@ def RL_finder_2D_LQR(
              [0.5 * running_coe_Q[6 - correction], running_coe_Q[-1]]])
         running_b = - 0.5 * torch.inverse(L_mat).matmul(N_mat.T)
 
+
+
+    return b_val, V_exact_dist
+
+def RL_finder_1D_merton(
+    beta: float,
+    b_init: float,
+    bd_low_s: float,
+    bd_upper_s: float,
+    bd_low_a: float,
+    bd_upper_a: float,
+    reward: Callable,
+    bases_Q: Callable,
+    num_iter: int,
+    m_Q: int,
+    I: int,
+    dt: float,
+    true_V: torch.Tensor,
+    info_true: Dict[str, Union[float, torch.Tensor]],
+) -> Tuple[List[float], List[float]]:
+    """
+    RL method for the 1D LQR problem.
+
+    Args:
+        beta (float): Discount factor.
+        b_init (float): Initial value of parameter b.
+        c_init (float): Initial value of parameter c.
+        bd_low_s, bd_upper_s (float): Lower and upper bounds for state space for generating trajectory data.
+        bd_low_a, bd_upper_a (float): Bounds for actions a for generating trajectory data.
+        reward (Callable): Reward function.
+        bases_Q (Callable): Basis functions for Q-function.
+        num_iter (int): Number of main iterations.
+        m (int): Number of trajectories for V evaluation at the end.
+        m_Q (int): Number of trajectories for Q evaluation.
+        I (int): Number of time steps when generating trajectories.
+        dt (float): Time step size.
+        true_V (torch.Tensor): True value function.
+        info_true (Dict): Contains true LQR parameters for generating trajectories.
+
+    Returns:
+        Tuple containing:
+            - List of b values,
+            - List of distances between optimal and current value functions at each iteration.
+    """
+    # Initialization
+    running_b = b_init
+    b_val, V_exact_dist = [], []
+
+    mu, r, sig, gamma = info_true['mu'], info_true['r'], info_true['sig'], info_true['gamma']
+
+    for _ in tqdm(range(num_iter), desc=f"Running RL method"):
+        # Record b and c and collect statistics
+        b_val.append(running_b)
+        V_pi = merton_policy_eval(mu, r, sig, gamma, running_b, beta)
+        V_exact_dist.append(dist_compute_merton(V_pi - true_V, upper=1))
+
+        # Generate trajectories for policy evaluation
+        traj_mat, act_mat = merton_RL_Q_data(r, mu, sig, running_b, I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
+        reward_mat = reward(traj_mat, act_mat)
+
+        mat_Q = mat_Q_cal_stochastic_RL(traj_mat, act_mat, bases_Q, dt, beta)
+        b_Q = b_cal_Q_RL(traj_mat, act_mat, reward_mat, bases_Q, dt)
+        running_coe_Q = torch.inverse(mat_Q).matmul(b_Q)
+
+        running_b = - 0.5 * running_coe_Q[1] / running_coe_Q[2]
 
 
     return b_val, V_exact_dist

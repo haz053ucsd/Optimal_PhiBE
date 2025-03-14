@@ -256,4 +256,19 @@ def LQR_2D_true_solution(A, B, sig, Q, R, beta):
 
     return b, c, val_coe
 
+# Merton utilities
+
+def true_solution_merton(mu, r, sig, gamma):
+    # return the optimal constant policy
+    return (mu - r) / (gamma * sig**2)
+
+def merton_policy_eval(mu, r, sig, gamma, running_b, beta):
+    # return the coefficient of \sqrt{s}
+    A = 1 / (1 - gamma) / (- r - running_b * (mu - r) + 0.5 * running_b**2 * sig**2 * gamma + (beta / (1 - gamma)))
+    return A / (1 - gamma)
+
+def dist_compute_merton(coe, upper=1):
+    # l2 distance with in (0, upper)
+    return abs(coe) * 0.5 * upper**2
+
 

@@ -183,3 +183,47 @@ def bases_poly_2D_s_a_simp(traj_mat, act_mat):
         [ans_s1s2, ans_s1a1, ans_s1a2, ans_s2a1, ans_s2a2, ans_a1a2, ans_s1_sq, ans_s2_sq, ans_a1_sq,
          ans_a2_sq], dim=0)
     return ans
+
+
+# basis for 1D merton
+
+def base_poly(s, j):
+    return s**j
+
+
+def d_base_poly(s, j):
+    if j == 0:
+        return torch.zeros_like(s)
+    return j * (s**(j - 1))
+
+def sec_d_base_poly(s, j):
+    if j == 0 or j == 1:
+        return torch.zeros_like(s)
+    return j * (j - 1) * (s**(j - 2))
+
+def base_2d(s, a, i, j):
+    return (s**i) * (a**j)
+
+def bases_poly_merton_simple(s):
+    # \sqrt{s}
+    lst = []
+    lst.append(base_poly(s, 0.5))
+    return torch.stack(lst)
+
+def d_bases_poly_merton_simple(s):
+    lst = []
+    lst.append(d_base_poly(s, 0.5))
+    return torch.stack(lst)
+
+def sec_bases_poly_merton_simple(s):
+    lst = []
+    lst.append(sec_d_base_poly(s, 0.5))
+    return torch.stack(lst)
+
+def bases_2d_merton_simple(s, a):
+    # \sqrt{s}, \sqrt{s}a, \sqrt{s}a^2
+    lst = []
+    lst.append(base_2d(s, a, 0.5, 0))
+    lst.append(base_2d(s, a, 0.5, 1))
+    lst.append(base_2d(s, a, 0.5, 2))
+    return torch.stack(lst)

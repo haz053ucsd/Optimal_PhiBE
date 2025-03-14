@@ -7,11 +7,11 @@ from tqdm import tqdm
 
 # Project-specific modules
 from utils import (
-    output_V, out_put, LQR_1D_true_solution, LQR_2D_true_solution, l_2_compute_1D_V, true_V_eval_1D, true_V_eval_2D, l_2_compute_2D_V, l_2_compute_1D_Q,
+    output_V, out_put, LQR_1D_true_solution, LQR_2D_true_solution, l_2_compute_1D_V, true_V_eval_1D, true_V_eval_2D, l_2_compute_2D_V, l_2_compute_1D_Q, merton_policy_eval, dist_compute_merton, true_solution_merton
 )
 from data_generator import (
     Q_dyn_generator_const_act_exact, Q_dyn_generator_const_act_2nd_exact, linear_dyn_generator_stochastic_const_act_exact, linear_dyn_generator_stochastic_const_act_exact_2nd,Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact,
-    linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact, linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact_2nd, Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact_2nd
+    linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact, linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact_2nd, Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact_2nd, merton_V_data, merton_Q_data, merton_Q_data_2nd
 )
 from phibe_utils import (
     mat_cal_stochastic, mat_cal_stochastic_2nd, b_cal, b_cal_2nd,
@@ -299,3 +299,130 @@ def phibe_finder_2D_LQR(
         V_func = output_V(coe_V, bases_V)
 
     return b_val, V_exact_dist, V_func
+
+
+
+def phibe_finder_1D_merton(
+    beta: float,
+    b_init: float,
+    Q_init: torch.Tensor,
+    bd_low_s: float,
+    bd_upper_s: float,
+    bd_low_b: float,
+    bd_upper_b: float,
+    reward: Callable,
+    bases_V: Callable,
+    d_bases_V: Callable,
+    sec_d_bases_V: Callable,
+    bases_Q: Callable,
+    num_iter: int,
+    deterministic: bool,
+    Q_method: str,
+    GD_num_iter: int,
+    m: int,
+    m_Q: int,
+    I: int,
+    lr: float,
+    dt: float,
+    order: int,
+    true_V: torch.Tensor,
+    info_true: Dict[str, Union[float, torch.Tensor]],
+) -> Tuple[List[float]]:
+    """
+        Optimal Phibe for the 1D LQR problem. (need modification for this description)
+
+        Args:
+            beta (float): Discount factor.
+            b_init (float): Initial value of parameter b.
+            Q_init (torch.Tensor): Initial coefficient matrix for Q.
+            bd_low_s, bd_upper_s (float): Lower and upper bounds for state space for generating trajectory data.
+            bd_low_b, bd_upper_b, bd_low_c, bd_upper_c (float): Bounds for policy parameters b and c
+            for generating trajectory data.
+            reward (Callable): Reward function.
+            bases_V, d_bases_V, sec_d_bases_V, bases_Q (Callable): Basis functions for value function and Q-function.
+            num_iter (int): Number of main iterations.
+            Q_method (str): Method used for Q evaluation "GD" or "Galerkin"
+            GD_num_iter (int): Number of gradient descent iterations for Q.
+            m (int): Number of trajectories for V evaluation.
+            m_Q (int): Number of trajectories for Q gradient descent.
+            I (int): Number of time steps when generating trajectories.
+            lr (float): Learning rate for Q updates.
+            dt (float): Time step size.
+            order (int): Order of the Phibe (1 or 2).
+            true_V (torch.Tensor): True value function.
+            info_true (Dict): Contains true LQR parameters for generating trajectories.
+
+        Returns:
+            Tuple containing:
+                - List of b values,
+                - List of distances between optimal and current value functions at each iteration.
+                - Callable value function of the returned optimal policy
+        """
+
+    if Q_method != "GD" and Q_method != "Galerkin":
+        raise ValueError("Invalid method. Supported methods are GD or Galerkin.")
+
+    # Initialization
+    running_b, running_coe_Q = b_init, Q_init
+    b_val, l2_dist = [], []
+
+    if deterministic:
+        if order == 1:
+            mat_V_comp, b_V_comp, grad_Q_comp, mat_cal_Q, b_cal_Q = mat_cal_stochastic_deterministic, b_cal, \
+                grad_compute_mini_batch_deterministic, galarkin_Q_mat_cal_1st_1d, \
+                galarkin_Q_b_cal_1st_1d_deterministic
+        elif order == 2:
+            mat_V_comp, b_V_comp, grad_Q_comp, mat_cal_Q, b_cal_Q = mat_cal_stochastic_2nd_deterministic, b_cal_2nd, \
+                grad_compute_mini_batch_2nd_deterministic, \
+                galarkin_Q_mat_cal_2nd_1d, galarkin_Q_b_cal_2nd_1d_deterministic
+        else:
+            raise ValueError("Invalid order. Supported values are 1 or 2.")
+    else:
+        if order == 1:
+            mat_V_comp, b_V_comp, grad_Q_comp, mat_cal_Q, b_cal_Q = mat_cal_stochastic, b_cal, grad_compute_mini_batch, galarkin_Q_mat_cal_1st_1d, \
+                galarkin_Q_b_cal_1st_1d
+        elif order == 2:
+            mat_V_comp, b_V_comp, grad_Q_comp, mat_cal_Q, b_cal_Q = mat_cal_stochastic_2nd, b_cal_2nd, grad_compute_mini_batch_2nd, \
+                galarkin_Q_mat_cal_2nd_1d, galarkin_Q_b_cal_2nd_1d
+        else:
+            raise ValueError("Invalid order. Supported values are 1 or 2.")
+
+    # Generate data for Q evaluation
+    if order == 1:
+        traj_mat_Q, act_mat_Q = merton_Q_data(info_true['r'], info_true['mu'], info_true['sig'], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b)  # (m, I)
+    elif order == 2:
+        traj_mat_Q, act_mat_Q = merton_Q_data_2nd(info_true['r'], info_true['mu'], info_true['sig'], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b) # (m, I)
+
+    for _ in tqdm(range(num_iter), desc=f"Running Optimal Phibe of order {order} using {Q_method}"):
+        # Record b, collect statistics
+        b_val.append(running_b)
+        V_pi = merton_policy_eval(info_true['mu'], info_true['r'], info_true['sig'], info_true['gamma'], running_b, beta)
+        l2_dist.append(dist_compute_merton(true_V - V_pi))
+
+        if order == 2:
+            traj_mat, act_mat = merton_V_data(info_true['r'], info_true['mu'], info_true['sig'], running_b, I, m, dt, bd_low_s, bd_upper_s)
+        elif order == 1:
+            traj_mat, act_mat = merton_V_data(info_true['r'], info_true['mu'], info_true['sig'], running_b, I, m, dt, bd_low_s, bd_upper_s)
+        reward_mat = reward(traj_mat, act_mat)
+
+        # Policy evaluation
+        mat_V, b_V = mat_V_comp(traj_mat, bases_V, d_bases_V, sec_d_bases_V, dt, beta), b_V_comp(traj_mat, reward_mat, bases_V)
+        coe_V = torch.inverse(mat_V).matmul(b_V)
+        V_grad, V_sec_grad = out_put(coe_V, d_bases_V), out_put(coe_V, sec_d_bases_V)
+
+        # Update for Q
+        if Q_method == "GD":
+            index = 0
+            while index < GD_num_iter:
+                Q_grad = grad_Q_comp(traj_mat_Q, act_mat_Q, running_coe_Q, V_grad, V_sec_grad, bases_Q, reward, dt)  # (dim_bases_Q)
+                running_coe_Q -= lr * Q_grad  # (dim_bases_Q)
+                index += 1
+        elif Q_method == "Galerkin":
+            mat_Q = mat_cal_Q(traj_mat_Q, act_mat_Q, bases_Q)
+            b_Q = b_cal_Q(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt)
+            running_coe_Q = torch.inverse(mat_Q) @ b_Q
+
+        running_b = - 0.5 * running_coe_Q[1] / running_coe_Q[2]
+        V_func = output_V(coe_V, bases_V)
+
+    return b_val, l2_dist, V_func
