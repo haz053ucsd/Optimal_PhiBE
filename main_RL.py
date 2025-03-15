@@ -210,16 +210,16 @@ def RL_finder_1D_merton(
     running_b = b_init
     b_val, V_exact_dist = [], []
 
-    mu, r, sig, gamma = info_true['mu'], info_true['r'], info_true['sig'], info_true['gamma']
+    mu, r, r_b, sig, gamma = info_true['mu'], info_true['r'], info_true['r_b'], info_true['sig'], info_true['gamma']
 
     for _ in tqdm(range(num_iter), desc=f"Running RL method"):
         # Record b and c and collect statistics
         b_val.append(running_b)
-        V_pi = merton_policy_eval(mu, r, sig, gamma, running_b, beta)
+        V_pi = merton_policy_eval(mu, r, r_b, sig, gamma, running_b, beta)
         V_exact_dist.append(dist_compute_merton(V_pi - true_V, upper=1))
 
         # Generate trajectories for policy evaluation
-        traj_mat, act_mat = merton_RL_Q_data(r, mu, sig, running_b, I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
+        traj_mat, act_mat = merton_RL_Q_data(r, r_b, mu, sig, running_b, I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
         reward_mat = reward(traj_mat, act_mat)
 
         mat_Q = mat_Q_cal_stochastic_RL(traj_mat, act_mat, bases_Q, dt, beta)

@@ -342,7 +342,7 @@ def GeoBM_one_step(s_0, mu, sig, dt):
     return s_0 * torch.exp((mu - (sig**2 / 2)) * dt + sig * BM_dt)
 
 
-def merton_V_data(r, mu, sig, running_b, I, m, dt, bd_low_s, bd_upper_s):
+def merton_V_data(r, r_b, mu, sig, running_b, I, m, dt, bd_low_s, bd_upper_s):
     # return shape (m, I) and (m, I), meaning m trajectories and I time steps with actions
     # generate data for computing V
     
@@ -353,11 +353,14 @@ def merton_V_data(r, mu, sig, running_b, I, m, dt, bd_low_s, bd_upper_s):
     traj_mat[:, 0] = traj_temp
 
     for i in range(1, I):
-        traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * running_b), (sig * running_b), dt)
+        if running_b <= 1:
+            traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * running_b), (sig * running_b), dt)
+        else:
+            traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * running_b - (running_b - 1) * (r_b - r)), (sig * running_b), dt)
         traj_mat[:, i] = traj_temp
     return traj_mat, act_mat
 
-def merton_Q_data(r, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b):
+def merton_Q_data(r, r_b, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b):
     # return shape (m, I) and (m, I), meaning m trajectories and I time steps with actions
     # generate data for computing Q
     
@@ -370,7 +373,9 @@ def merton_Q_data(r, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper
     act_mat[:, 0] = act_temp
 
     for i in range(1, I):
-        traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * act_temp), (sig * act_temp), dt)
+        # traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * act_temp), (sig * act_temp), dt)
+        r_mod = torch.where(act_temp > 0, r_b, r)
+        traj_temp = GeoBM_one_step(traj_temp, (r_mod + (mu - r_mod) * act_temp), (sig * act_temp), dt)
         traj_mat[:, i] = traj_temp
 
         act_temp = bd_low_b + (bd_upper_b - bd_low_b) * torch.rand(m)
@@ -380,7 +385,7 @@ def merton_Q_data(r, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper
 
 
 
-def merton_Q_data_2nd(r, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b):
+def merton_Q_data_2nd(r, r_b, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b):
     # return shape (m, I) and (m, I), meaning m trajectories and I time steps with actions
     # generate data for computing Q
     
@@ -393,7 +398,8 @@ def merton_Q_data_2nd(r, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_u
     act_mat[:, 0] = act_temp
 
     for i in range(1, I):
-        traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * act_temp), (sig * act_temp), dt)
+        r_mod = torch.where(act_temp > 0, r_b, r)
+        traj_temp = GeoBM_one_step(traj_temp, (r_mod + (mu - r_mod) * act_temp), (sig * act_temp), dt)
         traj_mat[:, i] = traj_temp
 
         if i % 2 == 0:
@@ -403,7 +409,7 @@ def merton_Q_data_2nd(r, mu, sig, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_u
     return traj_mat, act_mat
 
 
-def merton_RL_Q_data(r, mu, sig, running_c, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b):
+def merton_RL_Q_data(r, r_b, mu, sig, running_c, I, m, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b):
     # return shape (m, I) and (m, I), meaning m trajectories and I time steps with actions
     # generate data for computing Q
     
@@ -416,7 +422,9 @@ def merton_RL_Q_data(r, mu, sig, running_c, I, m, dt, bd_low_s, bd_upper_s, bd_l
     act_mat[:, 0] = act_temp
 
     for i in range(1, I):
-        traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * act_temp), (sig * act_temp), dt)
+        # traj_temp = GeoBM_one_step(traj_temp, (r + (mu - r) * act_temp), (sig * act_temp), dt)
+        r_mod = torch.where(act_temp > 0, r_b, r)
+        traj_temp = GeoBM_one_step(traj_temp, (r_mod + (mu - r_mod) * act_temp), (sig * act_temp), dt)
         traj_mat[:, i] = traj_temp
 
         act_temp = torch.ones(m) * running_c

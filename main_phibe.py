@@ -389,20 +389,20 @@ def phibe_finder_1D_merton(
 
     # Generate data for Q evaluation
     if order == 1:
-        traj_mat_Q, act_mat_Q = merton_Q_data(info_true['r'], info_true['mu'], info_true['sig'], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b)  # (m, I)
+        traj_mat_Q, act_mat_Q = merton_Q_data(info_true['r'], info_true['r_b'], info_true['mu'], info_true['sig'], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b)  # (m, I)
     elif order == 2:
-        traj_mat_Q, act_mat_Q = merton_Q_data_2nd(info_true['r'], info_true['mu'], info_true['sig'], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b) # (m, I)
+        traj_mat_Q, act_mat_Q = merton_Q_data_2nd(info_true['r'], info_true['r_b'], info_true['mu'], info_true['sig'], I, m_Q, dt, bd_low_s, bd_upper_s, bd_low_b, bd_upper_b) # (m, I)
 
     for _ in tqdm(range(num_iter), desc=f"Running Optimal Phibe of order {order} using {Q_method}"):
         # Record b, collect statistics
         b_val.append(running_b)
-        V_pi = merton_policy_eval(info_true['mu'], info_true['r'], info_true['sig'], info_true['gamma'], running_b, beta)
+        V_pi = merton_policy_eval(info_true['mu'], info_true['r'], info_true['r_b'], info_true['sig'], info_true['gamma'], running_b, beta)
         l2_dist.append(dist_compute_merton(true_V - V_pi))
 
         if order == 2:
-            traj_mat, act_mat = merton_V_data(info_true['r'], info_true['mu'], info_true['sig'], running_b, I, m, dt, bd_low_s, bd_upper_s)
+            traj_mat, act_mat = merton_V_data(info_true['r'], info_true['r_b'], info_true['mu'], info_true['sig'], running_b, I, m, dt, bd_low_s, bd_upper_s)
         elif order == 1:
-            traj_mat, act_mat = merton_V_data(info_true['r'], info_true['mu'], info_true['sig'], running_b, I, m, dt, bd_low_s, bd_upper_s)
+            traj_mat, act_mat = merton_V_data(info_true['r'], info_true['r_b'], info_true['mu'], info_true['sig'], running_b, I, m, dt, bd_low_s, bd_upper_s)
         reward_mat = reward(traj_mat, act_mat)
 
         # Policy evaluation
