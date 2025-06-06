@@ -1,7 +1,7 @@
 # Optimal_PhiBE
 
 This repository contains the code for the paper:  
-**OPTIMAL-PhiBE: A PDE-Based Model-Free Framework for Continuous-Time Reinforcement Learning**  
+**Optimal-PhiBE: A PDE-based Model-free framework for Continuous-time Reinforcement Learning**  
 [arXiv:2506.05208](https://arxiv.org/abs/2506.05208)
 
 ## Figure Reproduction Guide
