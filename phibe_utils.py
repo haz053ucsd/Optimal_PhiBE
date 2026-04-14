@@ -1,7 +1,14 @@
 import torch
-from utils import out_put_2d, output_Q
+
+from .utils import out_put_2d, output_Q
 
 torch.set_default_dtype(torch.float64)
+
+
+def _second_order_time_stop(I):
+    if I < 3:
+        raise ValueError("Second-order estimators require at least 3 time steps.")
+    return I - 2
 
 
 def mat_cal_stochastic(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
@@ -66,7 +73,7 @@ def mat_cal_stochastic_2nd_deterministic(traj_mat, bases, d_bases, sec_d_bases, 
 
     # Precompute index ranges
     I = traj_mat.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_mat_curr = traj_mat[:, :valid_I:2]  # (m, valid_I)
     traj_mat_next = traj_mat[:, 1:valid_I+1:2]
     traj_mat_next_next = traj_mat[:, 2:valid_I+2:2]  # (m, valid_I)
@@ -100,7 +107,7 @@ def mat_cal_stochastic_2nd(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
 
     # Precompute index ranges
     I = traj_mat.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_mat_curr = traj_mat[:, :valid_I:2]  # (m, valid_I)
     traj_mat_next = traj_mat[:, 1:valid_I+1:2]
     traj_mat_next_next = traj_mat[:, 2:valid_I+2:2]  # (m, valid_I)
@@ -145,7 +152,7 @@ def b_cal_2nd(traj_mat, reward_mat, bases):
     # returns (M+1)
 
     I = traj_mat.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     all_bases = bases(traj_mat[:, :valid_I:2]).permute(1, 2, 0)  # Shape should be (m, I-2, M+1)
 
     weighted_bases = reward_mat[:, :valid_I:2].unsqueeze(-1) * all_bases  # Shape will be (m, I-2, M+1)
@@ -229,7 +236,7 @@ def grad_compute_mini_batch_2nd(traj_mat_Q, act_mat_Q, running_coe_Q, V_grad, V_
     # running_coe_Q shape (dim_base_Q), V_grad takes (m, I) returns (m, I), V_sec_grad takes (m, I) returns (m, I),
     # bases_Q takes(m, I), (m, I) and returns (dim_bases_Q, m, I)
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, valid_I)
     traj_next = traj_mat_Q[:, 1:valid_I+1:2]  # (m, valid_I)
     traj_next_next = traj_mat_Q[:, 2:valid_I+2:2]  # (m, valid_I)
@@ -268,7 +275,7 @@ def grad_compute_mini_batch_2nd_deterministic(traj_mat_Q, act_mat_Q, running_coe
     # running_coe_Q shape (dim_base_Q), V_grad takes (m, I) returns (m, I), V_sec_grad takes (m, I) returns (m, I),
     # bases_Q takes(m, I), (m, I) and returns (dim_bases_Q, m, I)
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, valid_I)
     traj_next = traj_mat_Q[:, 1:valid_I+1:2]  # (m, valid_I)
     traj_next_next = traj_mat_Q[:, 2:valid_I+2:2]  # (m, valid_I)
@@ -314,7 +321,7 @@ def galarkin_Q_mat_cal_1st_1d(traj_mat_Q, act_mat_Q, bases_Q):
 
 def galarkin_Q_mat_cal_2nd_1d(traj_mat_Q, act_mat_Q, bases_Q):
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2 
+    valid_I = _second_order_time_stop(I)
     traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, I-1)
     actions_curr = act_mat_Q[:, :valid_I:2]
     bases_val = bases_Q(traj_curr, actions_curr) # (dim_bases_Q, m, I - 2)
@@ -349,7 +356,7 @@ def galarkin_Q_b_cal_1st_1d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_g
 def galarkin_Q_b_cal_2nd_1d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
 
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
 
     traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, I-2)
     traj_next = traj_mat_Q[:, 1:valid_I+1:2]  # (m, I-2)
@@ -406,7 +413,7 @@ def galarkin_Q_b_cal_1st_1d(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, 
 def galarkin_Q_b_cal_2nd_1d(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
 
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
 
     traj_curr = traj_mat_Q[:, :valid_I:2]  # (m, I-2)
     traj_next = traj_mat_Q[:, 1:valid_I+1:2]  # (m, I-2)
@@ -451,7 +458,7 @@ def mat_cal_stochastic_2D(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
     traj_mat_next = traj_mat[:, 1:, :]  # (m, I-1, dim)
 
     # Compute a, gradient, sec_gradient
-    a = bases(traj_mat_curr).squeeze()  # (M+1, m, I-1)
+    a = bases(traj_mat_curr).squeeze(-1)  # (M+1, m, I-1)
     gradient = d_bases(traj_mat_curr)  # (M+1, m, I-1, dim)
     sec_gradient = sec_d_bases(traj_mat_curr)  # (M + 1, m, I - 1, dim, dim)
 
@@ -483,7 +490,7 @@ def mat_cal_deterministic_2D(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
     traj_mat_next = traj_mat[:, 1:, :]  # (m, I-1, dim)
 
     # Compute a, gradient, sec_gradient
-    a = bases(traj_mat_curr).squeeze()  # (M+1, m, I-1)
+    a = bases(traj_mat_curr).squeeze(-1)  # (M+1, m, I-1)
     gradient = d_bases(traj_mat_curr)  # (M+1, m, I-1, dim)
     # sec_gradient = sec_d_bases(traj_mat_curr)  # (M + 1, m, I - 1, dim, dim)
 
@@ -512,13 +519,13 @@ def mat_cal_stochastic_2D_2nd(traj_mat, bases, d_bases, sec_d_bases, dt, beta):
 
     # Precompute index ranges
     I = traj_mat.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_mat_curr = traj_mat[:, :valid_I:2, :]  # (m, valid_I, dim)
     traj_mat_next = traj_mat[:, 1:valid_I+1:2, :]  # (m, valid_I, dim)
     traj_mat_next_next = traj_mat[:, 2:valid_I+2:2, :]  # (m, valid_I, dim)
 
     # Compute a, gradient, sec_gradient
-    a = bases(traj_mat_curr).squeeze()  # (M+1, m, valid_I)
+    a = bases(traj_mat_curr).squeeze(-1)  # (M+1, m, valid_I)
     gradient = d_bases(traj_mat_curr) # (M+1, m, valid_I, dim)
     sec_gradient = sec_d_bases(traj_mat_curr) # (M + 1, m, valid_I, dim, dim)
 
@@ -550,13 +557,13 @@ def mat_cal_deterministic_2D_2nd(traj_mat, bases, d_bases, sec_d_bases, dt, beta
 
     # Precompute index ranges
     I = traj_mat.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_mat_curr = traj_mat[:, :valid_I:2, :]  # (m, valid_I, dim)
     traj_mat_next = traj_mat[:, 1:valid_I+1:2, :]  # (m, valid_I, dim)
     traj_mat_next_next = traj_mat[:, 2:valid_I+2:2, :]  # (m, valid_I, dim)
 
     # Compute a, gradient, sec_gradient
-    a = bases(traj_mat_curr).squeeze()  # (M+1, m, valid_I)
+    a = bases(traj_mat_curr).squeeze(-1)  # (M+1, m, valid_I)
     gradient = d_bases(traj_mat_curr) # (M+1, m, valid_I, dim)
     # sec_gradient = sec_d_bases(traj_mat_curr) # (M + 1, m, valid_I, dim, dim)
 
@@ -589,7 +596,7 @@ def b_cal_2D_2nd(traj_mat, reward_mat, bases):
     # traj_mat shape: (m, I, dim), reward_mat shape: (m, I, 1), bases takes in (m, I, dim) and outputs (M+1, m, I, 1)
     # output shape: (M+1)
     I = traj_mat.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
 
     all_bases = bases(traj_mat[:,:valid_I:2,:]) # Shape should be (M+1, m, valid_I, 1)
     ans = torch.einsum("ijkl,jkl->i", all_bases, reward_mat[:,:valid_I:2,:])
@@ -678,11 +685,11 @@ def grad_compute_2D_mini_2nd(traj_mat_Q, act_mat_Q, running_coe_Q, V_grad, V_sec
     # reward takes (m, I, dim), (m, I, dim) and returns (m, I, 1)
     # m_Q_GD = int(bs / I)
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
 
     traj_curr = traj_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
-    traj_next = traj_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
-    traj_next_next = traj_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
+    traj_next = traj_mat_Q[:, 1:valid_I+1:2, :]  # (m, I-2, dim)
+    traj_next_next = traj_mat_Q[:, 2:valid_I+2:2, :]  # (m, I-2, dim)
     actions_curr = act_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
     reward_mat_curr = reward(traj_curr, actions_curr)  # (m, I-2, 1)
 
@@ -723,11 +730,11 @@ def grad_compute_2D_mini_2nd_deterministic(traj_mat_Q, act_mat_Q, running_coe_Q,
     # reward takes (m, I, dim), (m, I, dim) and returns (m, I, 1)
     # m_Q_GD = int(bs / I)
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
 
     traj_curr = traj_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
-    traj_next = traj_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
-    traj_next_next = traj_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
+    traj_next = traj_mat_Q[:, 1:valid_I+1:2, :]  # (m, I-2, dim)
+    traj_next_next = traj_mat_Q[:, 2:valid_I+2:2, :]  # (m, I-2, dim)
     actions_curr = act_mat_Q[:, :valid_I:2, :]  # (m, I-2, dim)
     reward_mat_curr = reward(traj_curr, actions_curr)  # (m, I-2, 1)
 
@@ -781,7 +788,7 @@ def galarkin_Q_mat_cal_2nd_2d(traj_mat_Q, act_mat_Q, bases_Q):
     # reward takes (m, I, dim), (m, I, dim) and returns (m, I, 1)
 
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
 
     traj_curr = traj_mat_Q[:, :valid_I:2, :]  # (m, valid_I, dim)
     actions_curr = act_mat_Q[:, :valid_I:2,: ]  # (m, valid_I, dim)
@@ -849,7 +856,7 @@ def galarkin_Q_b_cal_1st_2d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_g
 
 def galarkin_Q_b_cal_2nd_2d(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_curr = traj_mat_Q[:, :valid_I:2, :]  # (m, valid_I, dim)
     traj_next = traj_mat_Q[:, 1:valid_I+1:2, :]  # (m, valid_I, dim)
     traj_next_next = traj_mat_Q[:, 2:valid_I+2:2, :]  # (m, valid_I, dim)
@@ -884,7 +891,7 @@ def galarkin_Q_b_cal_2nd_2d(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, 
 def galarkin_Q_b_cal_2nd_2d_deterministic(traj_mat_Q, act_mat_Q, V_grad, V_sec_grad, bases_Q, reward, dt):
 
     I = traj_mat_Q.shape[1]
-    valid_I = (I // 2) * 2 - 2
+    valid_I = _second_order_time_stop(I)
     traj_curr = traj_mat_Q[:, :valid_I:2, :]  # (m, valid_I, dim)
     traj_next = traj_mat_Q[:, 1:valid_I+1:2, :]  # (m, valid_I, dim)
     traj_next_next = traj_mat_Q[:, 2:valid_I+2:2, :]  # (m, valid_I, dim)

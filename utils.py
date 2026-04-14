@@ -8,6 +8,16 @@ from scipy.linalg import solve_continuous_are, expm
 device = torch.device("cpu")
 torch.set_default_dtype(torch.float64)
 
+def solve_linear_system(mat, rhs, ridge=1e-10):
+    try:
+        return torch.linalg.solve(mat, rhs)
+    except RuntimeError:
+        eye = torch.eye(mat.shape[0], device=mat.device, dtype=mat.dtype)
+        try:
+            return torch.linalg.solve(mat + ridge * eye, rhs)
+        except RuntimeError:
+            return torch.linalg.lstsq(mat, rhs).solution
+
 def out_put(theta, bases):
     def out(s):
         bases_val = bases(s).permute(1, 2, 0) # (m, I-1, M+1)
@@ -311,8 +321,19 @@ def is_detectable(A, C):
                 return False
     return True
 
+def symmetric_psd_sqrt(mat, tol=1e-10):
+    mat_sym = 0.5 * (mat + mat.T)
+    eigvals, eigvecs = torch.linalg.eigh(mat_sym)
+    if torch.any(eigvals < -tol):
+        raise ValueError("State cost matrix Q must be positive semidefinite.")
+    eigvals = torch.clamp(eigvals, min=0)
+    return eigvecs @ torch.diag(torch.sqrt(eigvals)) @ eigvecs.T
+
 def LQR_2D_true_solution(A, B, sig, Q, R, beta):
-    if (not is_detectable(A - 0.5 * beta * torch.eye(2), B)) or (not is_detectable(A - 0.5 * beta * torch.eye(2), -Q)):
+    eye = torch.eye(A.shape[0], device=A.device, dtype=A.dtype)
+    A_shifted = A - 0.5 * beta * eye
+    Q_sqrt = symmetric_psd_sqrt(Q)
+    if (not is_stabilizable(A_shifted, B)) or (not is_detectable(A_shifted, Q_sqrt)):
         raise ValueError("Problem not well-posed")
     # value function order: k_00, k_01, k_02, k_10, k_11, k_20
     A_np = A.cpu().numpy().astype(np.float64)
@@ -324,7 +345,7 @@ def LQR_2D_true_solution(A, B, sig, Q, R, beta):
 
     P = solve_continuous_are(A_np - 0.5 * beta * I_np, B_np, Q_np, R_np)
     # P = solve_continuous_are(A.numpy() - 0.5 * beta * np.eye(2), B.numpy(), Q.numpy(), R.numpy())
-    b = - torch.inverse(R) @ B.T @ torch.tensor(P)
+    b = - solve_linear_system(R, B.T @ torch.tensor(P, device=R.device, dtype=R.dtype))
     c = torch.zeros(2, 1)
     val_coe = true_V_eval_2D(A, B, b, R, Q, beta, sig)
 
@@ -359,6 +380,6 @@ def merton_policy_eval(mu, r, r_b, sig, gamma, running_b, beta):
         return A / (1 - gamma)
 def dist_compute_merton(coe, upper=1):
     # l2 distance with in (0, upper)
-    return abs(coe) * 0.5 * upper**2
+    return abs(coe) * upper / sqrt(2)
 
 

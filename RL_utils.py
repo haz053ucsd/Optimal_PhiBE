@@ -152,8 +152,8 @@ def mat_Q_cal_stochastic_RL_2D(traj_mat, act_mat, bases_Q, dt, beta):
     act_mat_next = act_mat[:, 1:, :]  # (m, I-1, dim)
 
     # Compute a, b
-    a = bases_Q(traj_mat_curr, act_mat_curr).squeeze()  # (M+1, m, I-1)
-    b = a - torch.exp(- torch.tensor([beta * dt])) * bases_Q(traj_mat_next, act_mat_next).squeeze() # (M+1, m, I-1)
+    a = bases_Q(traj_mat_curr, act_mat_curr).squeeze(-1)  # (M+1, m, I-1)
+    b = a - torch.exp(- torch.tensor([beta * dt])) * bases_Q(traj_mat_next, act_mat_next).squeeze(-1) # (M+1, m, I-1)
     ans = torch.einsum('ijk,ljk->il', a, b)
 
     return ans
@@ -181,8 +181,8 @@ def mat_V_cal_stochastic_RL_2D(traj_mat, bases, dt, beta):
     traj_mat_next = traj_mat[:, 1:, :]  # (m, I-1, dim)
 
     # Compute a, b
-    a = bases(traj_mat_curr).squeeze()  # (M+1, m, I-1)
-    b = a - torch.exp(- torch.tensor([beta * dt])) * bases(traj_mat_next).squeeze()  # (M+1, m, I-1)
+    a = bases(traj_mat_curr).squeeze(-1)  # (M+1, m, I-1)
+    b = a - torch.exp(- torch.tensor([beta * dt])) * bases(traj_mat_next).squeeze(-1)  # (M+1, m, I-1)
     ans = torch.einsum('ijk,ljk->il', a, b)
 
     return ans

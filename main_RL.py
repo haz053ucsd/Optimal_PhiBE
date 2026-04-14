@@ -1,13 +1,20 @@
 import torch
 from tqdm import tqdm
-from typing import Callable, List, Tuple, Dict, Union
+from typing import Callable, List, Tuple
 
-# Project-specific modules
-from utils import (true_V_eval_1D, true_V_eval_2D, l_2_compute_1D_V, l_2_compute_2D_V, merton_policy_eval, dist_compute_merton, RL_policy_eval_1D)
-from data_generator import (linear_dyn_generator_stochastic_Q_exact, Q_dyn_generator_2D_stochastic_const_act_RL_const_diffusion_exact, merton_RL_Q_data)
-
-from RL_utils import (
-    mat_Q_cal_stochastic_RL, b_cal_Q_RL, mat_Q_cal_stochastic_RL_2D, b_cal_Q_2D_RL, mat_Q_cal_stochastic_RL_better, b_cal_Q_RL_better)
+from .utils import (
+    true_V_eval_1D, true_V_eval_2D, l_2_compute_1D_V, l_2_compute_2D_V, merton_policy_eval,
+    dist_compute_merton, RL_policy_eval_1D, solve_linear_system
+)
+from .data_generator import (
+    linear_dyn_generator_stochastic_Q_exact, Q_dyn_generator_2D_stochastic_const_act_RL_const_diffusion_exact,
+    merton_RL_Q_data
+)
+from .RL_utils import (
+    mat_Q_cal_stochastic_RL, b_cal_Q_RL, mat_Q_cal_stochastic_RL_2D, b_cal_Q_2D_RL,
+    mat_Q_cal_stochastic_RL_better, b_cal_Q_RL_better
+)
+from .problems import LQR1DProblem, LQR2DProblem, MertonProblem
 torch.set_default_dtype(torch.float64)
 device = torch.device("cpu")
 
@@ -26,7 +33,7 @@ def RL_finder_1D_LQR(
     I: int,
     dt: float,
     true_V: torch.Tensor,
-    info_true: Dict[str, Union[float, torch.Tensor]],
+    problem: LQR1DProblem,
 ) -> Tuple[List[float], List[float]]:
     """
     RL method for the 1D LQR problem.
@@ -46,7 +53,7 @@ def RL_finder_1D_LQR(
         I (int): Number of time steps when generating trajectories.
         dt (float): Time step size.
         true_V (torch.Tensor): True value function.
-        info_true (Dict): Contains true LQR parameters for generating trajectories.
+        problem (LQR1DProblem): Contains true LQR parameters for generating trajectories.
 
     Returns:
         Tuple containing:
@@ -60,16 +67,16 @@ def RL_finder_1D_LQR(
     for _ in tqdm(range(num_iter), desc=f"Running Optimal BE PI"):
         # Record b and c and collect statistics
         b_val.append(running_b)
-        V_pi = true_V_eval_1D(info_true["A"], info_true["B"], info_true["sig"], info_true["Q"], info_true["R"],  beta, running_b)
+        V_pi = true_V_eval_1D(problem.A, problem.B, problem.sig, problem.Q, problem.R,  beta, running_b)
         V_exact_dist.append(l_2_compute_1D_V(true_V - V_pi, 3, -3))
 
         # Generate trajectories for policy evaluation
-        traj_mat, act_mat = linear_dyn_generator_stochastic_Q_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, int(m_Q), dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
+        traj_mat, act_mat = linear_dyn_generator_stochastic_Q_exact(problem.A, problem.B, problem.sig, running_b, I, int(m_Q), dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
         reward_mat = reward(traj_mat, act_mat)
 
         mat_Q = mat_Q_cal_stochastic_RL(traj_mat, act_mat, bases_Q, dt, beta)
         b_Q = b_cal_Q_RL(traj_mat, act_mat, reward_mat, bases_Q, dt)
-        running_coe_Q = torch.inverse(mat_Q).matmul(b_Q)
+        running_coe_Q = solve_linear_system(mat_Q, b_Q)
 
         if not simple_basis:
             running_b = - running_coe_Q[2] / (2 * running_coe_Q[1])
@@ -94,7 +101,7 @@ def RL_finder_1D_LQR_better(
     I: int,
     dt: float,
     true_V: torch.Tensor,
-    info_true: Dict[str, Union[float, torch.Tensor]],
+    problem: LQR1DProblem,
 ) -> Tuple[List[float], List[float]]:
     """
     RL method for the 1D LQR problem.
@@ -114,7 +121,7 @@ def RL_finder_1D_LQR_better(
         I (int): Number of time steps when generating trajectories.
         dt (float): Time step size.
         true_V (torch.Tensor): True value function.
-        info_true (Dict): Contains true LQR parameters for generating trajectories.
+        problem (LQR1DProblem): Contains true LQR parameters for generating trajectories.
 
     Returns:
         Tuple containing:
@@ -128,16 +135,16 @@ def RL_finder_1D_LQR_better(
     for _ in tqdm(range(num_iter), desc=f"Running Optimal BE PI"):
         # Record b and c and collect statistics
         b_val.append(running_b)
-        V_pi = true_V_eval_1D(info_true["A"], info_true["B"], info_true["sig"], info_true["Q"], info_true["R"],  beta, running_b)
+        V_pi = true_V_eval_1D(problem.A, problem.B, problem.sig, problem.Q, problem.R,  beta, running_b)
         V_exact_dist.append(l_2_compute_1D_V(true_V - V_pi, 3, -3))
 
         # Generate trajectories for policy evaluation
-        traj_mat, act_mat = linear_dyn_generator_stochastic_Q_exact(info_true["A"], info_true["B"], info_true["sig"], running_b, I, int(m_Q), dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
+        traj_mat, act_mat = linear_dyn_generator_stochastic_Q_exact(problem.A, problem.B, problem.sig, running_b, I, int(m_Q), dt, bd_low_s, bd_upper_s, bd_low_a, bd_upper_a)
         reward_mat = reward(traj_mat, act_mat)
 
         mat_Q = mat_Q_cal_stochastic_RL_better(traj_mat, act_mat, bases_Q, dt, beta)
         b_Q = b_cal_Q_RL_better(traj_mat, act_mat, reward_mat, bases_Q, dt, beta)
-        running_coe_Q = torch.inverse(mat_Q).matmul(b_Q)
+        running_coe_Q = solve_linear_system(mat_Q, b_Q)
 
         if not simple_basis:
             running_b = - running_coe_Q[2] / (2 * running_coe_Q[1])
@@ -163,7 +170,7 @@ def RL_finder_2D_LQR(
         m_Q: int,
         dt: float,
         true_V: torch.Tensor,
-        info_true: Dict[str, Union[torch.Tensor, float]],
+        problem: LQR2DProblem,
 ) -> Tuple[List[torch.Tensor], List[float]]:
     """
     RL method for the 2D LQR problem.
@@ -184,7 +191,7 @@ def RL_finder_2D_LQR(
         m_Q (int): Number of trajectories for Q evaluation.
         dt: (float): Time step size.
         true_V (torch.Tensor): True value function.
-        info_true (Dict): Contains true LQR parameters for generating trajectories.
+        problem (LQR2DProblem): Contains true LQR parameters for generating trajectories.
 
     Returns:
         Tuple containing:
@@ -194,7 +201,7 @@ def RL_finder_2D_LQR(
 
     running_b= b_init[:, :]
     b_val, V_exact_dist = [], []
-    A, B, sig, R, Q = info_true["A"], info_true["B"], info_true["sig"], info_true["R"], info_true["Q"]
+    A, B, sig, R, Q = problem.A, problem.B, problem.sig, problem.R, problem.Q
 
     for _ in tqdm(range(num_iter), desc=f"Running Optimal BE PI"):
         b_val.append(running_b)
@@ -211,15 +218,18 @@ def RL_finder_2D_LQR(
         # update for Q
         mat_Q = mat_Q_cal_stochastic_RL_2D(traj_mat, act_mat, bases_Q, dt, beta)
         b_Q = b_cal_Q_2D_RL(traj_mat, act_mat, reward_mat, bases_Q, dt)
-        running_coe_Q = torch.inverse(mat_Q) @ b_Q
+        running_coe_Q = solve_linear_system(mat_Q, b_Q)
 
         correction = 1 if simple_basis else 0
-        N_mat = torch.tensor([[running_coe_Q[2 - correction], running_coe_Q[3 - correction]],
-                              [running_coe_Q[4 - correction], running_coe_Q[5 - correction]]])
-        L_mat = torch.tensor(
-            [[running_coe_Q[9 - correction], 0.5 * running_coe_Q[6 - correction]],
-             [0.5 * running_coe_Q[6 - correction], running_coe_Q[-1]]])
-        running_b = - 0.5 * torch.inverse(L_mat).matmul(N_mat.T)
+        N_mat = torch.stack([
+            torch.stack([running_coe_Q[2 - correction], running_coe_Q[3 - correction]]),
+            torch.stack([running_coe_Q[4 - correction], running_coe_Q[5 - correction]]),
+        ])
+        L_mat = torch.stack([
+            torch.stack([running_coe_Q[9 - correction], 0.5 * running_coe_Q[6 - correction]]),
+            torch.stack([0.5 * running_coe_Q[6 - correction], running_coe_Q[-1]]),
+        ])
+        running_b = - 0.5 * solve_linear_system(L_mat, N_mat.T)
 
 
 
@@ -239,7 +249,7 @@ def RL_finder_1D_merton(
     I: int,
     dt: float,
     true_V: torch.Tensor,
-    info_true: Dict[str, Union[float, torch.Tensor]],
+    problem: MertonProblem,
 ) -> Tuple[List[float], List[float]]:
     """
     RL method for the 1D LQR problem.
@@ -258,7 +268,7 @@ def RL_finder_1D_merton(
         I (int): Number of time steps when generating trajectories.
         dt (float): Time step size.
         true_V (torch.Tensor): True value function.
-        info_true (Dict): Contains true LQR parameters for generating trajectories.
+        problem (MertonProblem): Contains true Merton parameters for generating trajectories.
 
     Returns:
         Tuple containing:
@@ -269,7 +279,7 @@ def RL_finder_1D_merton(
     running_b = b_init
     b_val, V_exact_dist = [], []
 
-    mu, r, r_b, sig, gamma = info_true['mu'], info_true['r'], info_true['r_b'], info_true['sig'], info_true['gamma']
+    mu, r, r_b, sig, gamma = problem.mu, problem.r, problem.r_b, problem.sig, problem.gamma
 
     for _ in tqdm(range(num_iter), desc=f"Running Optimal BE PI"):
         # Record b and c and collect statistics
@@ -283,7 +293,7 @@ def RL_finder_1D_merton(
 
         mat_Q = mat_Q_cal_stochastic_RL(traj_mat, act_mat, bases_Q, dt, beta)
         b_Q = b_cal_Q_RL(traj_mat, act_mat, reward_mat, bases_Q, dt)
-        running_coe_Q = torch.inverse(mat_Q).matmul(b_Q)
+        running_coe_Q = solve_linear_system(mat_Q, b_Q)
 
         if - 0.5 * running_coe_Q[1] / running_coe_Q[2] <= 0:
             continue

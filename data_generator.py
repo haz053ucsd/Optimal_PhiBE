@@ -1,9 +1,27 @@
 import torch
 from torch.distributions import MultivariateNormal
-import scipy.linalg
 import numpy as np
 from math import sqrt
 torch.set_default_dtype(torch.float64)
+
+def _linearized_2D_coefficients(A, B, dt, dim):
+    eye = torch.eye(dim, device=A.device, dtype=A.dtype)
+    exp_Adt = torch.linalg.matrix_exp(A * dt)
+    exp_2Adt = torch.linalg.matrix_exp(A * 2 * dt)
+    A_1 = (exp_Adt - eye) / dt
+    B_1 = torch.linalg.solve(A, A_1 @ B)
+    C_A = torch.linalg.solve(A, exp_2Adt - eye) / (2 * dt)
+    return A_1, B_1, C_A
+
+def _linear_1D_const_action_step(prev, action, A, B, sig, dt):
+    if torch.abs(A).item() < 1e-12:
+        mean = prev + B * action * dt
+        var = torch.as_tensor(sig**2 * dt, device=prev.device, dtype=prev.dtype)
+    else:
+        exp_Adt = torch.exp(A * dt)
+        mean = exp_Adt * prev + B * action / A * (exp_Adt - 1)
+        var = sig**2 / (2 * A) * (torch.exp(2 * A * dt) - 1)
+    return mean, var
 
 # 1D LQR
 def linear_dyn_generator_stochastic_const_act_exact(A, B, sig, running_b, I, m, dt, bd_low_s, bd_upper_s):
@@ -11,7 +29,7 @@ def linear_dyn_generator_stochastic_const_act_exact(A, B, sig, running_b, I, m, 
 
     init_value = (bd_upper_s - bd_low_s) * torch.rand(m, 1) + bd_low_s
     res = torch.zeros((m, I))
-    res[:, 0] = init_value.squeeze()
+    res[:, 0] = init_value.squeeze(-1)
 
     prev = res[:, 0]
     a_temp = running_b * prev
@@ -22,9 +40,7 @@ def linear_dyn_generator_stochastic_const_act_exact(A, B, sig, running_b, I, m, 
     B = torch.tensor([B], dtype=torch.float64)
     for i in range(1, I):
 
-        mean = torch.exp(A * dt) * prev + B * a_temp / A * (torch.exp(A * dt) - 1)
-
-        var = sig**2 / (2 * A) * (torch.exp(2 * A * dt) - 1)
+        mean, var = _linear_1D_const_action_step(prev, a_temp, A, B, sig, dt)
 
         prev = mean + torch.randn(m) * torch.sqrt(var)
 
@@ -40,7 +56,7 @@ def linear_dyn_generator_stochastic_const_act_exact_2nd(A, B, sig, running_b, I,
 
     init_value = (bd_upper_s - bd_low_s) * torch.rand(m, 1) + bd_low_s
     res = torch.zeros((m, I))
-    res[:, 0] = init_value.squeeze()
+    res[:, 0] = init_value.squeeze(-1)
 
     prev = res[:, 0]
     a_temp = running_b * prev
@@ -50,9 +66,7 @@ def linear_dyn_generator_stochastic_const_act_exact_2nd(A, B, sig, running_b, I,
     B = torch.tensor([B], dtype=torch.float64)
     for i in range(1, I):
 
-        mean = torch.exp(A * dt) * prev + B * a_temp / A * (torch.exp(A * dt) - 1)
-
-        var = sig**2 / (2 * A) * (torch.exp(2 * A * dt) - 1)
+        mean, var = _linear_1D_const_action_step(prev, a_temp, A, B, sig, dt)
 
         prev = mean + torch.randn(m) * torch.sqrt(var)
 
@@ -73,7 +87,7 @@ def Q_dyn_generator_const_act_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_upper_s,
     init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, 1) + bd_low_s
 
     res = torch.zeros((m_Q, I))
-    res[:, 0] = init_value.squeeze()
+    res[:, 0] = init_value.squeeze(-1)
     act_mat = torch.zeros((m_Q, I))
     act_mat[:, 0] = b_temp_tensor * res[:, 0]
 
@@ -82,8 +96,7 @@ def Q_dyn_generator_const_act_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_upper_s,
     A = torch.tensor([A], dtype=torch.float64)
     B = torch.tensor([B], dtype=torch.float64)
     for i in range(1, I):
-        mean = torch.exp(A * dt) * prev + B * act_temp / A * (torch.exp(A * dt) - 1)
-        var = sig**2 / (2 * A) * (torch.exp(2 * A * dt) - 1)
+        mean, var = _linear_1D_const_action_step(prev, act_temp, A, B, sig, dt)
 
         prev = mean + torch.randn(m_Q) * torch.sqrt(var)
 
@@ -103,7 +116,7 @@ def Q_dyn_generator_const_act_2nd_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_uppe
     init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, 1) + bd_low_s
 
     res = torch.zeros((m_Q, I))
-    res[:, 0] = init_value.squeeze()
+    res[:, 0] = init_value.squeeze(-1)
     act_mat = torch.zeros((m_Q, I))
     act_mat[:, 0] = b_temp_tensor * res[:, 0]
     prev = res[:, 0]
@@ -111,8 +124,7 @@ def Q_dyn_generator_const_act_2nd_exact(A, B, sig, I, m_Q, dt, bd_low_s, bd_uppe
     A = torch.tensor([A], dtype=torch.float64)
     B = torch.tensor([B], dtype=torch.float64)
     for i in range(1, I):
-        mean = torch.exp(A * dt) * prev + B * act_temp / A * (torch.exp(A * dt) - 1)
-        var = sig**2 / (2 * A) * (torch.exp(2 * A * dt) - 1)
+        mean, var = _linear_1D_const_action_step(prev, act_temp, A, B, sig, dt)
 
         prev = mean + torch.randn(m_Q) * torch.sqrt(var)
 
@@ -130,7 +142,7 @@ def linear_dyn_generator_stochastic_Q_exact(A, B, sig, running_b,
     init_value = (bd_upper_s - bd_low_s) * torch.rand(m, 1) + bd_low_s
 
     res = torch.zeros((m, I))
-    res[:, 0] = init_value.squeeze()
+    res[:, 0] = init_value.squeeze(-1)
 
     act = torch.zeros((m, I))
 
@@ -142,8 +154,7 @@ def linear_dyn_generator_stochastic_Q_exact(A, B, sig, running_b,
     A = torch.tensor([A], dtype=torch.float64)
     B = torch.tensor([B], dtype=torch.float64)
     for i in range(1, I):
-        mean = torch.exp(A * dt) * prev + B * a_temp / A * (torch.exp(A * dt) - 1)
-        var = sig**2 / (2 * A) * (torch.exp(2 * A * dt) - 1)
+        mean, var = _linear_1D_const_action_step(prev, a_temp, A, B, sig, dt)
 
         prev = mean + torch.randn(m) * torch.sqrt(var)
 
@@ -160,14 +171,14 @@ def one_step_2D_exact(prev, A_1, B_1, C_A, sig, action, dt, dim):
     #  prev (m, dim), A (dim, dim), B (dim, dim), action (m, dim)
     #  return (m, dim)
     if sig != 0:
-        mean_coe = A_1 * dt + torch.eye(dim)
+        mean_coe = A_1 * dt + torch.eye(dim, device=prev.device, dtype=prev.dtype)
         mean = torch.einsum('ij,kj->ki', mean_coe, prev) + dt * torch.einsum('ij,kj->ki', B_1, action)  # (m ,dim)
         covar = (sig**2 * C_A * dt).unsqueeze(0).repeat(prev.shape[0], 1, 1)  # (m, dim, dim)
         # print(C_A)
         mvn = MultivariateNormal(mean, covariance_matrix=covar)
         samples = mvn.sample()
     else:
-        mean_coe = A_1 * dt + torch.eye(dim)
+        mean_coe = A_1 * dt + torch.eye(dim, device=prev.device, dtype=prev.dtype)
         mean = torch.einsum('ij,kj->ki', mean_coe, prev) + dt * torch.einsum('ij,kj->ki', B_1, action)  # (m ,dim)
         samples = mean[:, :]
     return samples
@@ -178,16 +189,12 @@ def linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact(A, B, sig
     # shape of running_c: (dim, 1)
     # shape of output: (m, I, dim)
     # generate data for computing V in 2D case (1st order)
-    init_value = (bd_upper_s - bd_low_s) * torch.rand(m, dim) + bd_low_s
+    init_value = (bd_upper_s - bd_low_s) * torch.rand(m, dim, device=A.device, dtype=A.dtype) + bd_low_s
     dim = A.shape[0]
-    exp_Adt = torch.tensor(scipy.linalg.expm(A.numpy() * dt))
-    exp_2Adt = torch.tensor(scipy.linalg.expm(A.numpy() * 2 * dt))
-    A_1 = 1 / dt * (exp_Adt - torch.eye(dim))
-    B_1 = torch.inverse(A) @ A_1 @ B
-    C_A = 1 / (2 * dt) * torch.inverse(A) @ (exp_2Adt - torch.eye(dim))
+    A_1, B_1, C_A = _linearized_2D_coefficients(A, B, dt, dim)
 
-    res = torch.zeros((m, I, dim))
-    act_mat = torch.zeros((m, I, dim))
+    res = torch.zeros((m, I, dim), device=A.device, dtype=A.dtype)
+    act_mat = torch.zeros((m, I, dim), device=A.device, dtype=A.dtype)
     res[:, 0, :] = init_value[:]  # (m, dim)
     act_mat[:, 0, :] = torch.einsum("ij,kj->ki", running_b, init_value[:])
     prev = res[:, 0, :]  # (m, dim)
@@ -209,16 +216,12 @@ def linear_dyn_generator_stochastic_2D_const_act_const_diffusion_exact_2nd(A, B,
     # shape of running_c: (dim, 1)
     # shape of output: (m, I, dim)
     # generate data for computing V in 2D case (2nd order)
-    init_value = (bd_upper_s - bd_low_s) * torch.rand(m, dim) + bd_low_s
+    init_value = (bd_upper_s - bd_low_s) * torch.rand(m, dim, device=A.device, dtype=A.dtype) + bd_low_s
     dim = A.shape[0]
-    exp_Adt = torch.tensor(scipy.linalg.expm(A.numpy() * dt))
-    exp_2Adt = torch.tensor(scipy.linalg.expm(A.numpy() * 2 * dt))
-    A_1 = 1 / dt * (exp_Adt - torch.eye(dim))
-    B_1 = torch.inverse(A) @ A_1 @ B
-    C_A = 1 / (2 * dt) * torch.inverse(A) @ (exp_2Adt - torch.eye(dim))
+    A_1, B_1, C_A = _linearized_2D_coefficients(A, B, dt, dim)
 
-    res = torch.zeros((m, I, dim))
-    act_mat = torch.zeros((m, I, dim))
+    res = torch.zeros((m, I, dim), device=A.device, dtype=A.dtype)
+    act_mat = torch.zeros((m, I, dim), device=A.device, dtype=A.dtype)
     res[:, 0, :] = init_value[:]  # (m, dim)
     act_mat[:, 0, :] = torch.einsum("ij,kj->ki", running_b, init_value[:])
     prev = res[:, 0, :]  # (m, dim)
@@ -239,20 +242,16 @@ def Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact(A, B, sig, I, 
                                             bd_upper_s, bd_low_b, bd_upper_b, dim):
     # res shape: (m_Q, I, dim)
     # generate data for computing Q in 2D case for Phibe (1st order)
-    b_temp_tensor = bd_low_b + (bd_upper_b - bd_low_b) * torch.rand(m_Q, dim, dim)
-    init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, dim) + bd_low_s
+    b_temp_tensor = bd_low_b + (bd_upper_b - bd_low_b) * torch.rand(m_Q, dim, dim, device=A.device, dtype=A.dtype)
+    init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, dim, device=A.device, dtype=A.dtype) + bd_low_s
 
     dim = A.shape[0]
-    exp_Adt = torch.tensor(scipy.linalg.expm(A.numpy() * dt))
-    exp_2Adt = torch.tensor(scipy.linalg.expm(A.numpy() * 2 * dt))
-    A_1 = 1 / dt * (exp_Adt - torch.eye(dim))
-    B_1 = torch.inverse(A) @ A_1 @ B
-    C_A = 1 / (2 * dt) * torch.inverse(A) @ (exp_2Adt - torch.eye(dim))
+    A_1, B_1, C_A = _linearized_2D_coefficients(A, B, dt, dim)
 
-    res = torch.zeros((m_Q, I, dim))
+    res = torch.zeros((m_Q, I, dim), device=A.device, dtype=A.dtype)
     res[:, 0, :] = init_value  # (m_Q, dim)
-    act_mat = torch.zeros((m_Q, I, dim))
-    act_mat[:, 0, :] = (b_temp_tensor.matmul(res[:, 0, :].unsqueeze(-1))).squeeze()
+    act_mat = torch.zeros((m_Q, I, dim), device=A.device, dtype=A.dtype)
+    act_mat[:, 0, :] = (b_temp_tensor.matmul(res[:, 0, :].unsqueeze(-1))).squeeze(-1)
     act_temp = act_mat[:, 0, :]  # (m_Q, dim)
 
     prev = res[:, 0, :]  # (m_Q, dim)
@@ -262,7 +261,7 @@ def Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact(A, B, sig, I, 
         res[:, i, :] = prev
 
         # update and store actions
-        act_temp = (b_temp_tensor.matmul(res[:, i, :].unsqueeze(-1))).squeeze()
+        act_temp = (b_temp_tensor.matmul(res[:, i, :].unsqueeze(-1))).squeeze(-1)
         act_mat[:, i, :] = act_temp
 
     return res, act_mat
@@ -271,20 +270,16 @@ def Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact_2nd(A, B, sig,
                                                                   bd_upper_s, bd_low_b, bd_upper_b, dim):
     # res shape: (m_Q, I, dim)
     # generate data for computing Q in 2D case for Phibe (2nd order)
-    b_temp_tensor = bd_low_b + (bd_upper_b - bd_low_b) * torch.rand(m_Q, dim, dim)
-    init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, dim) + bd_low_s
+    b_temp_tensor = bd_low_b + (bd_upper_b - bd_low_b) * torch.rand(m_Q, dim, dim, device=A.device, dtype=A.dtype)
+    init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, dim, device=A.device, dtype=A.dtype) + bd_low_s
 
     dim = A.shape[0]
-    exp_Adt = torch.tensor(scipy.linalg.expm(A.numpy() * dt))
-    exp_2Adt = torch.tensor(scipy.linalg.expm(A.numpy() * 2 * dt))
-    A_1 = 1 / dt * (exp_Adt - torch.eye(dim))
-    B_1 = torch.inverse(A) @ A_1 @ B
-    C_A = 1 / (2 * dt) * torch.inverse(A) @ (exp_2Adt - torch.eye(dim))
+    A_1, B_1, C_A = _linearized_2D_coefficients(A, B, dt, dim)
 
-    res = torch.zeros((m_Q, I, dim))
+    res = torch.zeros((m_Q, I, dim), device=A.device, dtype=A.dtype)
     res[:, 0, :] = init_value  # (m_Q, dim)
-    act_mat = torch.zeros((m_Q, I, dim))
-    act_mat[:, 0, :] = (b_temp_tensor.matmul(res[:, 0, :].unsqueeze(-1))).squeeze()
+    act_mat = torch.zeros((m_Q, I, dim), device=A.device, dtype=A.dtype)
+    act_mat[:, 0, :] = (b_temp_tensor.matmul(res[:, 0, :].unsqueeze(-1))).squeeze(-1)
     act_temp = act_mat[:, 0, :]  # (m_Q, dim)
 
     prev = res[:, 0, :]  # (m_Q, dim)
@@ -295,7 +290,7 @@ def Q_dyn_generator_2D_stochastic_const_act_const_diffusion_exact_2nd(A, B, sig,
 
         # update and store actions
         if i % 2 == 0:
-            act_temp = (b_temp_tensor.matmul(res[:, i, :].unsqueeze(-1))).squeeze()
+            act_temp = (b_temp_tensor.matmul(res[:, i, :].unsqueeze(-1))).squeeze(-1)
         act_mat[:, i, :] = act_temp
 
     return res, act_mat
@@ -304,19 +299,15 @@ def Q_dyn_generator_2D_stochastic_const_act_RL_const_diffusion_exact(A, B, sig, 
                                             bd_upper_s, bd_low_a, bd_upper_a, dim):
     # res shape: (m_Q, I, dim)
     # generate data for computing Q in 2D case for RL
-    init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, dim) + bd_low_s
+    init_value = (bd_upper_s - bd_low_s) * torch.rand(m_Q, dim, device=A.device, dtype=A.dtype) + bd_low_s
 
     dim = A.shape[0]
-    exp_Adt = torch.tensor(scipy.linalg.expm(A.numpy() * dt))
-    exp_2Adt = torch.tensor(scipy.linalg.expm(A.numpy() * 2 * dt))
-    A_1 = 1 / dt * (exp_Adt - torch.eye(dim))
-    B_1 = torch.inverse(A) @ A_1 @ B
-    C_A = 1 / (2 * dt) * torch.inverse(A) @ (exp_2Adt - torch.eye(dim))
+    A_1, B_1, C_A = _linearized_2D_coefficients(A, B, dt, dim)
 
-    res = torch.zeros((m_Q, I, dim))
+    res = torch.zeros((m_Q, I, dim), device=A.device, dtype=A.dtype)
     res[:, 0, :] = init_value # (m_Q, dim)
-    act_mat = torch.zeros((m_Q, I, dim))
-    act_mat[:, 0, :] = bd_low_a + torch.rand(m_Q, dim) * (bd_upper_a - bd_low_a)
+    act_mat = torch.zeros((m_Q, I, dim), device=A.device, dtype=A.dtype)
+    act_mat[:, 0, :] = bd_low_a + torch.rand(m_Q, dim, device=A.device, dtype=A.dtype) * (bd_upper_a - bd_low_a)
     act_temp = act_mat[:, 0, :] # (m_Q, dim)
 
     prev = res[:, 0, :] # (m_Q, dim)

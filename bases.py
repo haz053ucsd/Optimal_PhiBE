@@ -102,11 +102,11 @@ def sec_d_bases_poly_2D(mat):
     # order of the last two dimension: 0 means partial derivative w.r.t. s_1, 1 means partial derivative w.r.t. s_2. It will be symmetric.
     # return shape (4, m, I, dim, dim)
     ans_00 = torch.zeros(mat.shape[0], mat.shape[1], 2, 2, device=mat.device) # (m, I, 2, 2)
-    mat_02 = torch.tensor([[0., 0.], [0., 2.]])
+    mat_02 = torch.tensor([[0., 0.], [0., 2.]], device=mat.device, dtype=mat.dtype)
     ans_02 = mat_02.expand(mat.shape[0], mat.shape[1], 2, 2)
-    mat_11 = torch.eye(2)
+    mat_11 = torch.tensor([[0., 1.], [1., 0.]], device=mat.device, dtype=mat.dtype)
     ans_11 = mat_11.expand(mat.shape[0], mat.shape[1], 2, 2)
-    mat_20 = torch.tensor([[2., 0.], [0., 0.]])
+    mat_20 = torch.tensor([[2., 0.], [0., 0.]], device=mat.device, dtype=mat.dtype)
     ans_20 = mat_20.expand(mat.shape[0], mat.shape[1], 2, 2)
 
     ans = torch.stack([ans_00, ans_02, ans_11, ans_20], dim=0)
@@ -118,11 +118,11 @@ def sec_d_bases_poly_2D_simp(mat):
     # order of the first dimension: (s_1, s_2) = (0,2), (1,1), (2,0)
     # order of the last two dimension: 0 means partial derivative w.r.t. s_1, 1 means partial derivative w.r.t. s_2. It will be symmetric.
     # return shape (3, m, I, dim, dim)
-    mat_02 = torch.tensor([[0., 0.], [0., 2.]])
+    mat_02 = torch.tensor([[0., 0.], [0., 2.]], device=mat.device, dtype=mat.dtype)
     ans_02 = mat_02.expand(mat.shape[0], mat.shape[1], 2, 2)
-    mat_11 = torch.eye(2).float()
+    mat_11 = torch.tensor([[0., 1.], [1., 0.]], device=mat.device, dtype=mat.dtype)
     ans_11 = mat_11.expand(mat.shape[0], mat.shape[1], 2, 2)
-    mat_20 = torch.tensor([[2., 0.], [0., 0.]])
+    mat_20 = torch.tensor([[2., 0.], [0., 0.]], device=mat.device, dtype=mat.dtype)
     ans_20 = mat_20.expand(mat.shape[0], mat.shape[1], 2, 2)
 
     ans = torch.stack([ans_02, ans_11, ans_20], dim=0)
