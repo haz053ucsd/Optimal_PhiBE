@@ -28,7 +28,7 @@ python -m pip install -r .\Optimal_PhiBE\requirement.txt
 ## Figure Reproduction
 
 | Paper figure | Notebook |
-| --- | --- | --- |
+| --- | --- |
 | Figure 5 A-D | `comparison_1D_deterministic.ipynb` |
 | Figure 6 A-D | `comparison_1D_stochastic.ipynb` |
 | Figure 7 A-D | `comparison_2D_deterministic.ipynb` |
